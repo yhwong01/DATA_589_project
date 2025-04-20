@@ -4,5 +4,128 @@ format: html
 editor: visual
 ---
 
+## deer_ppp vs elevation
+
+### get data 
+
 ```{r}
+library(sf)
+library(spatstat.geom)
+library(readr)
+load("data/BC_Parks.Rda")
+win_bc_sf <- st_as_sf(DATA$Window)
+win_bc <- as.owin(win_bc_sf)
+elevation_im <- as.im(DATA$Elevation)
+occ <- read_tsv("data/occurrence.txt", show_col_types = FALSE)
+colnames(occ)
+occ_bc <- occ[!is.na(occ$decimalLatitude) & !is.na(occ$decimalLongitude), ]
+
+occ_sf <- st_as_sf(occ_bc,
+                   coords = c("decimalLongitude", "decimalLatitude"),
+                   crs = 4326) 
+occ_proj <- st_transform(occ_sf, crs = st_crs(win_bc_sf))
+
+coords <- st_coordinates(occ_proj)
+
+deer_ppp <- ppp(x = coords[, 1],
+                y = coords[, 2],
+                window = win_bc)
+```
+
+### analysis
+
+```{r}
+library(spatstat.explore)
+elevation_im <- as.im(elevation_im, W = win_bc)
+rho_elev <- rhohat(deer_ppp, elevation_im)
+plot(rho_elev, main = "Intensity of Deer vs Elevation")
+```
+
+The nonparametric intensity function shows that deer observations are strongly associated with low elevation regions. The estimated intensity peaks sharply below 400 meters and declines rapidly as elevation increases. Above 1000 meters, the occurrence intensity approaches zero, suggesting that high-altitude regions are unsuitable habitats for deer. This result is consistent with ecological expectations, as deer prefer temperate lowland environments with abundant vegetation and moderate climate.
+
+### model
+
+```{r}
+model_lin <- ppm(deer_ppp ~ elev, covariates = list(elev = elevation_im))
+model_quad <- ppm(deer_ppp ~ elev + I(elev^2), covariates = list(elev = elevation_im))
+AIC(model_lin)
+AIC(model_quad)
+```
+
+Based on AIC comparison, the quadratic elevation model (AIC = 379,856.3) outperformed the linear-only model (AIC = 383,226.3) by a large margin (ΔAIC = 3370). This indicates that the spatial intensity of deer occurrences follows a nonlinear relationship with elevation and is best captured by a model that includes both linear and quadratic terms.
+
+```{r}
+summary(model_quad)
+```
+
+We fitted a nonstationary Poisson point process model using elevation and its quadratic term to predict the spatial intensity of deer occurrences. The linear coefficient for elevation was significantly negative, indicating that deer tend to prefer lower elevations. The quadratic term was statistically significant but small in magnitude, suggesting a subtle curvature in the relationship. Residual analysis confirmed good model fit, and AIC comparison showed that the quadratic model provided a substantially better explanation than the linear-only model (ΔAIC = 3370).
+
+All coefficients were highly statistically significant (p \< 0.001). The 95% confidence intervals for both the linear and quadratic terms of elevation did not include zero, confirming their importance. The negative linear coefficient (CI: -0.00859 to -0.00836) indicates that deer intensity decreases with elevation, while the small positive quadratic coefficient (CI: 2.71e-06 to 2.83e-06) suggests a slight curvature in the relationship.
+
+```{r}
+coefs <- coef(model_elev)
+beta0 <- coefs["(Intercept)"]
+beta1 <- coefs["elev"]
+beta2 <- coefs["I(elev^2)"]
+
+elev_seq <- seq(0, 2000, length.out = 200)
+
+intensity <- exp(beta0 + beta1 * elev_seq + beta2 * elev_seq^2)
+
+plot(elev_seq, intensity, type = "l", lwd = 2, col = "blue",
+     xlab = "Elevation (m)", ylab = "Fitted Intensity",
+     main = "Fitted Intensity vs Elevation (from model)")
+
+```
+
+```{r}
+library(viridis)
+
+plot(predict(model_elev), 
+     main = "Fitted Intensity Surface", 
+     col = viridis(128),     
+     ribbon = TRUE,          
+     gamma = 0.1)             
+
+
+```
+
+```{r}
+library(ggplot2)
+
+coefs <- coef(model_elev)
+vcov_mat <- vcov(model_elev)
+elev_seq <- seq(0, 2000, length.out = 300)
+X <- cbind(1, elev_seq, elev_seq^2)
+
+log_lambda_hat <- as.vector(X %*% coefs)
+se_log_lambda <- sqrt(rowSums((X %*% vcov_mat) * X))
+
+fitted_log <- log10(exp(log_lambda_hat)) / 2
+upper_log <- log10(exp(log_lambda_hat + 5 * se_log_lambda)) / 2
+lower_log <- log10(exp(log_lambda_hat - 5 * se_log_lambda)) / 2
+
+min_val <- min(lower_log, na.rm = TRUE)
+max_val <- max(upper_log, na.rm = TRUE)
+
+fitted_scaled <- (fitted_log - min_val) / (max_val - min_val)
+upper_scaled <- (upper_log - min_val) / (max_val - min_val)
+lower_scaled <- (lower_log - min_val) / (max_val - min_val)
+
+df <- data.frame(
+  Elevation = elev_seq,
+  IntensityScaled = fitted_scaled,
+  LowerScaled = lower_scaled,
+  UpperScaled = upper_scaled
+)
+
+ggplot(df, aes(x = Elevation, y = IntensityScaled)) +
+  geom_ribbon(aes(ymin = LowerScaled, ymax = UpperScaled), fill = "skyblue", alpha = 0.4) +
+  geom_line(color = "darkblue", size = 1.3) +
+  labs(
+    title = "Standardized log100(Intensity) vs Elevation",
+    y = expression("Standardized log"[100]*"(Predicted Intensity)"),
+    x = "Elevation (m)"
+  ) +
+  theme_minimal(base_size = 14)
 ```
