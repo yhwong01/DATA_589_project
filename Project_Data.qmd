@@ -1,0 +1,204 @@
+---
+title: "Project_Dataset"
+format: html
+editor: visual
+---
+
+**Get BC Boundary**
+
+```{r}
+library(sf)
+library(spatstat.geom)
+
+load("data/BC_Parks.Rda")
+win_bc_sf <- st_as_sf(DATA$Window)
+win_bc <- as.owin(win_bc_sf)
+plot(win_bc)
+```
+
+**Get Elevation and Forest Cover**
+
+```{r}
+elevation_im <- as.im(DATA$Elevation)
+forest_im <- as.im(DATA$Forest)
+plot(elevation_im)
+plot(forest_im)
+
+```
+
+Get population data (No need to run if you have `pop_bc_proj.tif`)
+
+```{r}
+library(raster)
+library(terra)
+
+# Load population raster in WGS84
+pop_raw_terra <- rast("data/can_ppp_2020_constrained.tif")  # still in WGS84
+
+# Reproject BC to WGS84 to match population raster
+bc_wgs84_sf <- st_transform(win_bc_sf, crs = crs(pop_raw_terra))
+bc_wgs84_vect <- vect(bc_wgs84_sf)  # Convert sf to terra vector
+
+# Crop using WGS84
+pop_crop <- crop(pop_raw_terra, bc_wgs84_vect)  # Now they overlap
+
+# Reproject cropped pop to BC Albers (EPSG:3005)
+pop_proj <- project(pop_crop, "EPSG:3005", method = "bilinear")
+```
+
+Output population data (No need to run if you have `pop_bc_proj.tif`)
+
+```{r}
+
+pop_r <- raster(pop_proj)
+raster::writeRaster(pop_r, filename = "data/pop_bc_proj.tif", format = "GTiff", overwrite = TRUE)
+
+```
+
+**Read population data**
+
+```{r}
+library(terra)
+
+# Convert forest_im to terra raster (template)
+forest_r <- rast(
+  nrows = nrow(forest_im$v), 
+  ncols = ncol(forest_im$v),
+  xmin = forest_im$xrange[1], xmax = forest_im$xrange[2],
+  ymin = forest_im$yrange[1], ymax = forest_im$yrange[2],
+  crs = "EPSG:3005"
+)
+
+# Read population raster (already in EPSG:3005)
+pop_r_terra <- rast("data/pop_bc_proj.tif")
+
+# Resample population raster to forest resolution
+pop_resampled <- resample(pop_r_terra, forest_r, method = "bilinear")
+
+# Convert to matrix and then im object
+vals <- terra::as.matrix(pop_resampled, wide = TRUE)
+dim(vals)  # Should be [nrow, ncol]
+vals_flipped <- vals[nrow(vals):1, ]
+
+ext <- ext(pop_resampled)
+xmin(ext); xmax(ext)
+ymin(ext); ymax(ext)
+pop_im <- im(
+  vals_flipped,
+  xcol = seq(xmin(ext), xmax(ext), length.out = ncol(vals_flipped)),
+  yrow = seq(ymin(ext), ymax(ext), length.out = nrow(vals_flipped))
+)
+
+# check and plot
+plot(pop_im, main = "Resampled Population (Aligned to Forest)")
+
+```
+
+**Get deer data**
+
+```{r}
+library(readr)
+occ <- read_tsv("data/occurrence.txt", show_col_types = FALSE)
+colnames(occ)
+occ_bc <- occ[!is.na(occ$decimalLatitude) & !is.na(occ$decimalLongitude), ]
+
+occ_sf <- st_as_sf(occ_bc,
+                   coords = c("decimalLongitude", "decimalLatitude"),
+                   crs = 4326)  # WGS84
+occ_proj <- st_transform(occ_sf, crs = st_crs(win_bc_sf))
+
+# Extract coordinates
+coords <- st_coordinates(occ_proj)
+
+library(spatstat.geom)
+
+deer_ppp <- ppp(x = coords[, 1],
+                y = coords[, 2],
+                window = win_bc)
+
+plot(deer_ppp, main = "Deer Occurrences in BC (Projected)")
+```
+
+**Reshape** `elevation_im`,`forest_im`,`pop_im`
+
+```{r}
+# Dimensions
+dim(elevation_im$v)
+dim(forest_im$v)
+dim(pop_im$v)
+
+# Pixel sizes
+elevation_im$xstep
+forest_im$xstep
+pop_im$xstep
+
+# Bounding boxes
+range(elevation_im$xcol)
+range(forest_im$xcol)
+range(pop_im$xcol)
+
+```
+
+```{r}
+library(spatstat.explore)
+# Resample forest and population to elevation grid
+aligned <- harmonize.im(forest_im, elevation_im, pop_im)
+
+forest_resampled    <- aligned[[1]]
+elevation_resampled <- aligned[[2]]
+pop_resampled <- aligned[[3]]
+
+dim(forest_resampled$v)
+dim(elevation_resampled$v)
+dim(pop_resampled$v)
+```
+
+```{r}
+common_mask <- !is.na(forest_resampled$v) &
+               !is.na(elevation_resampled$v) &
+               !is.na(pop_resampled$v)
+
+forest_clean <- forest_resampled
+forest_clean$v <- ifelse(common_mask, forest_resampled$v, NA)
+
+elev_clean <- elevation_resampled
+elev_clean$v <- ifelse(common_mask, elevation_resampled$v, NA)
+
+pop_clean <- pop_resampled
+pop_clean$v <- ifelse(common_mask, pop_resampled$v, NA)
+
+
+```
+
+**Now we have `deer_ppp`, `forest_clean`, `elev_clean`, `pop_clean`. We could model with these covariates.**
+
+```{r}
+library(spatstat.model)
+
+model_forest <- ppm(deer_trimmed ~ forest_clean,
+                    covariates = list(forest_clean = forest_clean))
+summary(model_forest)
+
+```
+
+```{r}
+mask_im <- im(!is.na(forest_clean$v), xcol = forest_clean$xcol, yrow = forest_clean$yrow)
+valid_window <- as.owin(mask_im)
+
+quad <- quadscheme(deer_trimmed, dummy = runifpoint(5000, win = valid_window))
+mask_im_valid <- im(!is.na(forest_clean$v), xcol = forest_clean$xcol, yrow = forest_clean$yrow)
+valid_win <- as.owin(mask_im_valid)
+quad <- quadscheme(deer_trimmed, dummy = runifpoint(5000, win = valid_win))
+
+model_forest_q <- ppm(Q = quad,
+                      trend = ~ forest_clean,
+                      covariates = list(forest_clean = forest_clean))
+summary(model_forest_q)
+```
+
+```{r}
+plot(predict(model_forest_q), main = "Fitted Intensity: Deer ~ Forest Cover")
+rhohat(deer_trimmed, forest_clean)
+plot(rhohat(deer_trimmed, forest_clean), main = "Intensity vs Forest Cover")
+
+```
