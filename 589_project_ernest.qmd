@@ -1,0 +1,220 @@
+---
+title: "589_project_ernest"
+format: html
+editor: visual
+---
+
+# Data 589 Project
+
+## Load .Rdata
+
+```{r}
+file.exists("C:/DATA_589/project/data/deer_data.Rdata")
+load("C:/DATA_589/project/data/deer_data.Rdata")
+
+pop_clean<-pop_im
+str(pop_clean)
+
+```
+
+## Baseline Modeling
+
+```{r}
+library(spatstat)
+#null model
+model_null <- ppm(deer_ppp ~ 1)
+
+model_pop <- ppm(deer_ppp ~ pop, covariates = list(pop = pop_im))
+summary(model_pop)
+```
+
+```         
+Problem:  Values of the covariate ‘pop’ were NA or undefined at 75% (22743 out of 30177) of the quadrature points 
+```
+
+## Compute and plot rho function
+
+```{r}
+library(spatstat)
+
+# Compute rho function: expected relative intensity vs. population
+rho_pop <- rhohat(deer_ppp, covariate = pop_im)
+
+# Plot
+plot(rho_pop, 
+     main = expression(paste(rho, "-function: Deer Intensity vs Population")),
+     xlab = "Population", 
+     ylab = "Relative Intensity")
+
+```
+
+The ρ-function suggests **population has minimal or no clear effect** on deer intensity in most areas.\
+
+Where population is high (above 200), deer are rare, and intensity estimates become noisy due to **lack of data**.
+
+Most deer are observed in areas with **low to moderate population**, consistent with expectations of deer avoiding highly urbanized or densely populated regions.
+
+## Model Comparison: Compare with null model
+
+```{r}
+# Model summary
+summary(model_pop)
+
+# Likelihood ratio test (compare with null model)
+anova(model_null, model_pop, test = "LRT")
+
+# Quadrat test (statistical + visual)
+qtest_pop <- quadrat.test(model_pop, nx = 5, ny = 5)
+print(qtest_pop)
+plot(qtest_pop, main = "Quadrat Test of Model Fit (model_pop)")
+
+# Residual diagnostic plots
+par(mfrow = c(2, 2))
+plot(model_pop, which = 1:4)
+
+# Lurking variable plot
+par(mfrow = c(1, 1))
+lurking(model_pop, covariate = pop_filled, cumulative = TRUE)
+
+# Rho function (nonparametric covariate check)
+rho_pop <- rhohat(deer_ppp, covariate = pop_filled)
+plot(rho_pop, 
+     main = expression(paste(rho, "-function: Deer Intensity vs Population")),
+     xlab = "Population", ylab = "Relative Intensity")
+
+# AIC comparison
+AIC(model_null, model_pop)
+
+# Visualise fitted intensity (log scale)
+plot(predict(model_pop), 
+     log = TRUE, 
+     main = "Log Fitted Intensity (model_pop)", 
+     n = 2048)
+
+# Overlay deer points on predicted intensity surface
+plot(predict(model_pop, n = 512), 
+     log = TRUE, 
+     main = "Model Prediction vs Deer Data (model_pop)")
+plot(deer_ppp, add = TRUE, cols = "red", pch = ".")
+
+# Plot effect of population (log-intensity scale)
+effectfun(model_pop, "pop", se.fit = FALSE, 
+          main = "Effect of Population on Log Intensity (model_pop)")
+
+# Plot effect of population (intensity scale)
+curve(exp(coef(model_pop)[1] + coef(model_pop)[2] * x),
+      from = min(pop_filled$v, na.rm = TRUE), 
+      to = max(pop_filled$v, na.rm = TRUE),
+      xlab = "Population", ylab = "Estimated Intensity",
+      main = "Estimated Intensity vs Population (model_pop)")
+```
+
+## Summary on model_pop
+
+The original Poisson point process model (`model_pop`) estimates deer intensity as a function of raw population values (`pop_im`). The population coefficient is positive (0.041), indicating a weak but significant increase in deer intensity with increasing population. The effect is statistically significant based on the likelihood ratio test (Deviance = 1918.2, p \< 2.2e-16), although the magnitude of the effect is modest (about a 4.2% increase in intensity per unit increase in population).
+
+However, the model encountered substantial technical issues due to data quality. Specifically, 75% of the quadrature points had missing (`NA`) or undefined population values, which led to a large portion of points being discarded during model fitting. Consequently, the chi-squared goodness-of-fit test could not be computed (X² = NaN), and additional warnings were issued about illegal points and tile coverage gaps. This severely limits confidence in the model's reliability and interpretability.
+
+Overall, while the covariate effect remains statistically significant, the lack of data coverage and unstable diagnostics highlight the need for smoothing or interpolation (e.g., using `Smooth()` or kriging) to produce a more robust and usable model.
+
+## Use smoothing instead
+
+Smoothing was applied to the population covariate to address the presence of missing values (`NA` or `NaN`) and to ensure that valid population values were available across the entire spatial domain required by the point process model. Since the original covariate was sparse or only available at selected locations (e.g., via co-Kriging at quadrature points), Gaussian smoothing provided a principled way to interpolate across space, resulting in a continuous and complete surface. This allowed for valid model fitting and diagnostic procedures, such as evaluating the covariate's effect on deer intensity using `ppm()` and `rhohat()`, without computational errors or data gaps.
+
+## Apply Smoothing
+
+```{r}
+pop_smoothed <- Smooth(pop_im, sigma = 2500)
+
+# Replace non-positive or NA values with a small positive value (e.g., 1e-6)
+pop_smoothed$v[is.na(pop_smoothed$v) | pop_smoothed$v <= 0] <- 0
+
+```
+
+## Rho Plot
+
+```{r}
+rho_pop <- rhohat(deer_ppp, covariate = pop_smoothed)
+
+# Plot
+plot(rho_pop, 
+     main = expression(paste(rho, "-function: Deer Intensity vs Population")),
+     xlab = "Population", 
+     ylab = "Relative Intensity")
+```
+
+## Modelling with smoothed population
+
+```{r}
+library(spatstat)
+
+# Smooth the co-Kriged population covariate
+pop_filled <- Smooth(pop_clean, sigma = 2500)  # Adjust sigma if needed
+
+# Use the smoothed version in ppm()
+model_fixed <- ppm(deer_ppp ~ pop, covariates = list(pop = pop_filled))
+model_fixed
+```
+
+## Modelling: Compare with null model
+
+```{r}
+library(spatstat)
+
+# Model summary
+summary(model_fixed)
+
+# Likelihood ratio test (compare with null model)
+anova(model_null, model_fixed, test = "LRT")
+
+# Quadrat test (statistical + visual)
+qtest <- quadrat.test(model_fixed, nx = 5, ny = 5)
+print(qtest)
+plot(qtest, main = "Quadrat Test of Model Fit")
+
+# Residual diagnostic plots
+par(mfrow = c(2, 2))
+plot(model_fixed, which = 1:4)
+
+# Lurking variable plot
+par(mfrow = c(1, 1))
+lurking(model_fixed, covariate = pop_smoothed, cumulative = TRUE)
+
+# Rho function (nonparametric covariate check)
+rho_pop <- rhohat(deer_ppp, covariate = pop_filled)
+plot(rho_pop, 
+     main = expression(paste(rho, "-function: Deer Intensity vs Population")),
+     xlab = "Population", ylab = "Relative Intensity")
+
+# AIC comparison
+AIC(model_null, model_fixed)
+
+# Visualise fitted intensity (log scale)
+plot(predict(model_fixed), 
+     log = TRUE, 
+     main = "Log Fitted Intensity (ppm)", 
+     n = 2048)
+
+# Overlay deer points on predicted intensity surface
+plot(predict(model_fixed, n = 512), 
+     log = TRUE, 
+     main = "Model Prediction vs Deer Data")
+plot(deer_ppp, add = TRUE, cols = "red", pch = ".")
+
+# Plot effect of population (log-intensity scale)
+effectfun(model_fixed, "pop", se.fit = FALSE, 
+          main = "Effect of Population on Log Intensity")
+
+# Plot effect of population (intensity scale)
+curve(exp(coef(model_fixed)[1] + coef(model_fixed)[2] * x),
+      from = min(pop_filled$v, na.rm = TRUE), 
+      to = max(pop_filled$v, na.rm = TRUE),
+      xlab = "Population", ylab = "Estimated Intensity",
+      main = "Estimated Intensity vs Population")
+
+
+```
+
+## Summary on model_fixed (model with smoothed population)
+
+The fitted model `model_fixed` is a Poisson point process model estimating deer intensity as a function of population. The population coefficient is 0.216, indicating that deer intensity increases by about 24% per unit increase in population. The effect is highly significant (p \< 2.2e-16), confirming that population improves model fit. However, a chi-squared goodness-of-fit test shows lack of fit (χ² = 57,482, p \< 2.2e-16), suggesting population alone does not fully explain the spatial pattern. Additional covariates or spatial structure may be needed.
