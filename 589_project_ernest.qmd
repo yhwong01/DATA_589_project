@@ -9,9 +9,10 @@ editor: visual
 ## Load .Rdata
 
 ```{r}
-file.exists("C:/DATA_589/project/data/deer_data.Rdata")
-load("C:/DATA_589/project/data/deer_data.Rdata")
+#file.exists("C:/DATA_589/project/data/deer_data.Rdata")
+#load("C:/DATA_589/project/data/deer_data.Rdata")
 
+load("data/deer_data.Rdata")
 pop_clean<-pop_im
 str(pop_clean)
 
