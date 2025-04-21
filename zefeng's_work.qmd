@@ -9,7 +9,7 @@ editor: visual
 ### get data
 
 ```{r}
-load("data/deer_clean_covariates.RData")
+load("data/deer_data.Rdata")
 ls()
 ```
 
@@ -18,16 +18,16 @@ library(sf)
 library(spatstat.geom)
 library(readr)
 
-win_bc_sf <- st_as_sf(valid_window)
-win_bc <- as.owin(win_bc_sf)
-elevation_im <- as.im(elev_clean)
+# win_bc_sf <- st_as_sf(valid_window)
+# win_bc <- as.owin(win_bc_sf)
+elevation_im <- as.im(elevation_im)
+deer_clean <- deer_ppp
 ```
 
 ### analysis
 
 ```{r}
 library(spatstat.explore)
-elevation_im <- as.im(elevation_im, W = win_bc)
 rho_elev <- rhohat(deer_clean, elevation_im)
 plot(rho_elev, main = "Intensity of Deer vs Elevation")
 ```
