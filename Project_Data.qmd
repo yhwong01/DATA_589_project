@@ -167,6 +167,14 @@ elev_clean$v <- ifelse(common_mask, elevation_resampled$v, NA)
 pop_clean <- pop_resampled
 pop_clean$v <- ifelse(common_mask, pop_resampled$v, NA)
 
+mask_im <- im(common_mask, xcol = forest_clean$xcol, yrow = forest_clean$yrow)
+valid_window <- as.owin(mask_im)
+
+# Trim point pattern to valid area
+deer_clean <- deer_ppp[valid_window]
+
+save(deer_clean, forest_clean, elev_clean, pop_clean, valid_window,
+     file = "data/deer_clean_covariates.RData")
 
 ```
 
@@ -174,10 +182,38 @@ pop_clean$v <- ifelse(common_mask, pop_resampled$v, NA)
 
 ```{r}
 library(spatstat.model)
-
-model_forest <- ppm(deer_trimmed ~ forest_clean,
+model_forest <- ppm(deer_clean ~ forest_clean,
                     covariates = list(forest_clean = forest_clean))
 summary(model_forest)
+
+```
+
+```{r}
+library(spatstat.model)
+
+# Generate dummy points only within valid region
+quad <- quadscheme(deer_clean, dummy = runifpoint(10000, win = valid_window))
+
+# Refit model using custom quadrature scheme
+model_forest_q <- ppm(Q = quad,
+                      trend = ~ forest_clean,
+                      covariates = list(forest_clean = forest_clean))
+summary(model_forest_q)
+```
+
+```{r}
+# Mask image: only include where forest_clean is not NA
+forest_valid_mask <- im(!is.na(forest_clean$v), xcol = forest_clean$xcol, yrow = forest_clean$yrow)
+forest_valid_win <- as.owin(forest_valid_mask)
+
+# Generate dummy points *only* inside forest-valid region
+quad <- quadscheme(deer_clean, dummy = runifpoint(10000, win = forest_valid_win))
+
+# Refit model
+model_forest_q <- ppm(Q = quad,
+                      trend = ~ forest_clean,
+                      covariates = list(forest_clean = forest_clean))
+summary(model_forest_q)
 
 ```
 
