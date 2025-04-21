@@ -1,0 +1,390 @@
+---
+title: "Multivariate_Model"
+author: "Shiqi Zhang"
+date: "2025-04-21"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Modeling Deer Intensity in BC with Elevation, Forest Cover, and Population Density
+### Data preparation for multivariate models
+```{r}
+# Load packages
+library(sp)
+library(spatstat)
+library(sf)
+library(spatstat.geom)
+```
+```{r}
+# Load the data
+load("data/deer_data.Rdata")
+
+# Load the window
+win_bc_sf <- st_as_sf(deer_ppp$window)
+win_bc <- as.owin(win_bc_sf)
+```
+```{r}
+# Plot the elevation with deer distribution
+plot(elevation_im, main = "Elevation")
+plot(deer_ppp,
+     pch = 16,
+     cex = 0.4,
+     cols = "black",
+     add = TRUE)
+```
+```{r}
+# Plot the population
+plot(pop_im, main = "Population Density")
+```
+```{r}
+# Replot without NA values
+pop_km2 <- pop_im
+pop_km2$v <- pop_km2$v * 100
+
+# Convert pop_im (im) into point coordinates with values
+pop_df <- as.data.frame(pop_km2)
+pop_pts <- pop_df[!is.na(pop_df$value) & pop_df$value > 0, ]
+
+# Scale dot size by population
+pop_size <- sqrt(pop_pts$value) / 100
+
+# Replot
+plot(win_bc, main = "Population Points over BC", border = "grey")
+points(pop_pts$x, pop_pts$y,
+       pch = 21,
+       bg = "green",
+       col = "black",
+       cex = pop_size)
+legend("topright",
+       legend = c("1,000", "5,000", "10,000", "20,000"),
+       pt.cex = sqrt(c(1000, 5000, 10000, 20000)) / 200,
+       pch = 21,
+       pt.bg = "green",
+       col = "black",
+       title = "People / km²",
+       bty = "n")
+```
+```{r}
+# Apply kernel smoothing over the population raster using a Gaussian kernel with a ~2.5 km bandwidth
+pop_smoothed <- Smooth(pop_im, sigma = 2500)
+
+# Replace NA or zero/small values with a small positive floor
+pop_smoothed$v[is.na(pop_smoothed$v) | pop_smoothed$v <= 0] <- 1e-6
+
+```
+```{r}
+plot(pop_smoothed)
+```
+```{r}
+# Mask all covariates to BC window
+forest_masked <- forest_im[win_bc, drop=FALSE]
+elev_masked   <- elevation_im[win_bc, drop=FALSE]
+pop_masked    <- pop_smoothed[win_bc, drop=FALSE]
+```
+```{r}
+# Visualize masked population
+plot(pop_masked, main = "Masked Population Density (Smoothed)")
+```
+```{r}
+# Add a small constant to avoid log(0)
+pop_log <- eval.im(log(pop_masked + 1e-3))
+
+#install.packages("viridis")
+plot(pop_log, 
+     main = "Log-scaled Smoothed Population Density",
+     col = viridis::viridis(100))
+```
+Now with the log-transformed, smoothed population density and the viridis color palette, the map clearly highlights populated corridors along the southern coast and interior valleys, while low-density regions become more distinguishable across the province.
+
+```{r}
+# Overlay with the deer points
+plot(pop_log, 
+     main = "Log-scaled Smoothed Population Density with Deer Points",
+     col = viridis::viridis(100))
+plot(deer_ppp,
+     pch = 16,
+     cex = 0.2,
+     cols = "black",
+     add = TRUE)
+```
+#### Check for collinearity
+```{r}
+# Create grid of elevation image coordinates
+grid_xy <- expand.grid(x = elev_masked$xcol, y = elev_masked$yrow)
+
+# Interpolate forest and pop at elevation grid locations
+forest_at_elev <- interp.im(forest_masked, x = grid_xy$x, y = grid_xy$y)
+pop_at_elev    <- interp.im(pop_masked, x = grid_xy$x, y = grid_xy$y)
+
+# Get elevation values as flat vector
+elev_vals <- as.vector(as.matrix(elev_masked))
+
+# Combine into a clean data frame and remove NAs
+cov_df <- data.frame(
+  forest = forest_at_elev,
+  elev   = elev_vals,
+  pop    = pop_at_elev
+)
+
+cov_df <- na.omit(cov_df)
+```
+
+```{r}
+# Compute correlation matrix and create visualization
+cor(cov_df)
+pairs(cov_df, main = "Covariate Collinearity Check")
+```
+We checked for collinearity among forest cover, elevation, and population density by extracting aligned values across the study area and computing pairwise correlations. All correlation coefficients were close to zero, indicating minimal collinearity. Therefore, all three covariates were retained in the multivariate model.
+
+#### Standardize the covariates and mask the response
+```{r}
+# Standardize the covariates
+elev_std <- eval.im((elev_masked - mean(elev_masked, na.rm = TRUE)) / sd(elev_masked, na.rm = TRUE))
+pop_std  <- eval.im((pop_masked - mean(pop_masked, na.rm = TRUE)) / sd(pop_masked, na.rm = TRUE))
+
+# Create final mask for valid pixels across all covariates
+valid_mask <- !is.na(forest_masked) & !is.na(elev_std) & !is.na(pop_std)
+
+# Mask the deer point pattern
+deer_valid <- deer_ppp[valid_mask]
+```
+
+### Fit the Polynomial Model
+#### Multivariate point process model with a 4th-degree polynomial for forest cover, and quadratic terms for elevation and population density
+```{r}
+model_poly3cov <- ppm(deer_valid ~ polynom(forest, 3) + polynom(elev, 2) + polynom(pop, 2),
+                      covariates = list(forest = forest_masked,
+                                        elev = elev_std,
+                                        pop = pop_std))
+
+summary(model_poly3cov)
+```
+#### Model Validation
+```{r}
+# AIC value
+AIC(model_poly3cov)
+```
+```{r}
+#Run the quadrat test
+quadrat.test(model_poly3cov, nx = 5, ny = 4)
+```
+The results mean there’s still significant spatial structure left unexplained. 
+
+```{r}
+# Residual analysis
+# Calculate residuals
+res_im <- residuals(model_poly3cov, type = "pearson", drop = TRUE)
+
+# Plot residuals
+library(viridis)
+plot(res_im,
+     main = "Pearson Residuals",
+     col = viridis(100),
+     ribbon = TRUE)
+
+```
+
+```{r}
+# Log-scale intensity surface
+plot(model_poly3cov,
+log = TRUE,
+se = FALSE,
+superimpose = FALSE,
+n = 300,
+main = "Log-scaled Predicted Deer Intensity")
+
+# Overlay observed park locations
+plot(deer_valid,
+pch = 16,
+cex = 0.3,
+cols = "black",
+add = TRUE)
+```
+The Pearson residual plot reveals that residuals are uniformly negative across the study area, indicating that the model consistently underpredicts deer occurrences. This is further supported by the log-scaled predicted intensity map, where predicted values remain extremely low (as small as 1e–15) even in regions with many observed deer. Together, these plots suggest the current model fails to capture the true spatial intensity of deer distribution, particularly in known high-density areas.
+
+### Fit the Polynomial Model with Log-transformed Population
+```{r}
+logpop <- eval.im(log(pop_masked + 1e-6))
+
+model_poly_logpop <- ppm(deer_valid ~ polynom(forest, 3) + polynom(elev, 2) + polynom(pop, 2),
+                      covariates = list(forest = forest_masked,
+                                        elev = elev_std,
+                                        pop = logpop))
+
+summary(model_poly_logpop)
+```
+```{r}
+# Log-scale intensity surface
+plot(model_poly_logpop,
+log = TRUE,
+se = FALSE,
+superimpose = FALSE,
+n = 300,
+main = "Log-scaled Predicted Deer Intensity with Log-transformed Population")
+
+# Overlay observed park locations
+plot(deer_valid,
+pch = 16,
+cex = 0.2,
+cols = "black",
+add = TRUE)
+```
+#### Model Validation
+
+```{r}
+# AIC value
+AIC(model_poly_logpop)
+```
+AIC is lower compared to the previous model (~353,000+). 
+
+```{r}
+#Run the quadrat test
+quadrat.test(model_poly_logpop, nx = 5, ny = 4)
+```
+Chi-squared value dropped dramatically (from ~7,700 to ~2,100). 
+
+```{r}
+# Residual analysis
+# Calculate residuals
+res <- residuals(model_poly_logpop, type = "pearson", drop = TRUE)
+
+# Plot residuals
+plot(res,
+     main = "Pearson Residuals",
+     col = viridis(100),
+     ribbon = TRUE)
+
+```
+This version of the model with log-transformed population is a clear improvement:
+  
+The updated model incorporating log(pop) as a covariate significantly improves prediction quality. The log-scaled predicted intensity map now reveals a stronger spatial structure, with higher predicted deer intensity aligning better with known occurrence areas, particularly in southern BC and coastal regions. The Pearson residuals are more balanced and closer to zero overall, suggesting improved fit and less systematic underprediction. Additionally, the AIC decreased notably to 346,672, and the quadrat test chi-squared statistic dropped to 2,115.1, further indicating that the model captures more of the spatial variation in deer distribution compared to previous versions.
+
+### Assess Spatial Autocorrelation
+```{r}
+# Smooth residuals into an im object
+res_im <- Smooth(res, sigma = 10000)
+
+# Convert to data frame
+res_df <- as.data.frame(res_im)
+res_df <- na.omit(res_df)
+```
+
+#### Compute Moran’s I
+```{r}
+# Compute Moran’s I
+#install.packages("ape")
+#install.packages("fields")
+
+library(ape)
+library(fields)
+
+coords <- cbind(res_df$x, res_df$y)
+w <- 1 / (fields::rdist(coords) + 1e-6)  # avoid division by zero
+
+moran_result <- Moran.I(res_df$value, w)
+print(moran_result)
+
+```
+#### Compute Empirical Variogram
+```{r}
+#install.packages("gstat")
+library(gstat)
+library(sp)
+
+# Prepare spatial points
+spdf <- data.frame(residual = res_df$value, x = res_df$x, y = res_df$y)
+coordinates(spdf) <- ~x + y
+
+# Variogram
+vg <- variogram(residual ~ 1, data = spdf)
+plot(vg, main = "Empirical Variogram of Smoothed Pearson Residuals")
+
+```
+The residual analysis suggest that the model does not fully account for spatial dependence. Moran’s I on the smoothed Pearson residuals yielded a value of 1 with a p-value of 0, indicating strong and statistically significant positive spatial autocorrelation. This is further supported by the empirical variogram, which shows increasing semivariance with distance up to approximately 400,000 meters before flattening, suggesting spatial clustering in residuals. These findings imply that important spatial structure remains unexplained, motivating potential model refinement using more flexible spatial techniques such as generalized additive models (GAMs).
+
+
+### Fit the GAM
+
+```{r}
+# Create grid of covariates
+# Step 1: Get common pixel grid from forest_masked
+grid_xy <- expand.grid(x = forest_masked$xcol, y = forest_masked$yrow)
+
+# Step 2: Extract covariate values at the same locations
+forest_vals <- interp.im(forest_masked, x = grid_xy$x, y = grid_xy$y)
+elev_vals   <- interp.im(elev_std, x = grid_xy$x, y = grid_xy$y)
+pop_vals    <- interp.im(logpop, x = grid_xy$x, y = grid_xy$y)
+lambda_vals <- interp.im(predict(model_poly_logpop), x = grid_xy$x, y = grid_xy$y)
+
+# Step 3: Combine into one data frame
+gam_data <- data.frame(
+  x = grid_xy$x,
+  y = grid_xy$y,
+  forest = forest_vals,
+  elev = elev_vals,
+  pop = pop_vals,
+  log_lambda = lambda_vals
+)
+
+# Step 4: Remove any rows with NA
+gam_data <- na.omit(gam_data)
+
+```
+
+```{r}
+library(mgcv)
+
+# Fit GAM with smooth terms
+gam_model <- gam(log_lambda ~ s(forest) + s(elev) + s(pop), data = gam_data)
+
+summary(gam_model)
+
+```
+```{r}
+# Predict log intensity
+gam_data$log_lambda_pred <- predict(gam_model, newdata = gam_data)
+```
+
+```{r}
+library(ggplot2)
+
+# GAM-smoothed log intensity map
+ggplot(gam_data, aes(x = x, y = y, fill = log_lambda_pred)) +
+  geom_tile() +
+  coord_equal() +
+  scale_fill_viridis_c(name = "Log Intensity") +
+  labs(title = "GAM-Smooth Predicted Log Deer Intensity") +
+  theme_minimal()
+```
+```{r}
+# Overlay of the fitted GAM intensity map with deer occurrence points
+deer_df <- as.data.frame(coords(deer_valid))
+colnames(deer_df) <- c("x", "y")
+
+ggplot(gam_data, aes(x = x, y = y, fill = log_lambda_pred)) +
+  geom_tile() +
+  geom_point(data = deer_df, aes(x = x, y = y),
+             color = "black", size = 0.2, alpha = 0.3, inherit.aes = FALSE) +
+  coord_equal() +
+  scale_fill_viridis_c(name = "Log Intensity") +
+  labs(title = "GAM-Smooth Predicted Log Deer Intensity with Observed Points") +
+  theme_minimal()
+
+```
+
+The GAM-smoothed intensity surface highlights concentrated regions of predicted deer presence, especially in southern BC. The flexible smooth terms capture nonlinear relationships between deer density and environmental covariates, with clearer spatial structure and more nuanced intensity variation compared to the earlier Poisson model.
+
+#### Model Validation
+```{r}
+# AIC value
+AIC(gam_model)
+```
+The Generalized Additive Model (GAM) incorporating smooth terms for forest cover, elevation, and log-transformed population produced a strong overall fit. It explained 75.3% of the deviance, indicating that the non-linear relationships captured by the smoothers account for a substantial portion of the variation in the predicted log-deer intensity. All three covariates—forest, elev, and pop—had highly significant smooth terms (p < 2e-16), confirming their importance in modeling spatial deer distribution.
+
+The model also achieved a notably low Generalized Cross-Validation (GCV) score of approximately 1.56e-15, suggesting a high-quality smooth fit. In terms of parsimony and model performance, the GAM yielded an AIC of -71,014,078, which is substantially lower than that of the best-performing parametric model (AIC ≈ 346,672). This dramatic improvement in AIC indicates a far superior balance between model fit and complexity.
+
+Compared to earlier polynomial Poisson point process models, the GAM shows clear advantages in flexibility, interpretability, and predictive strength, making it the most effective model among those evaluated for capturing spatial variation in deer intensity across British Columbia.
+

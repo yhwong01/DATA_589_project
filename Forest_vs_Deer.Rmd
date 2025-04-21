@@ -1,0 +1,163 @@
+---
+title: "Forest_vs_Deer"
+author: "Shiqi Zhang"
+date: "2025-04-21"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Forest Cover vs Deer in BC
+### Data Preparation and Visualization
+```{r}
+# Load packages
+library(sp)
+library(spatstat)
+library(sf)
+library(spatstat.geom)
+```
+
+```{r}
+load("data/deer_data.Rdata")
+
+# Create mask for valid overlap
+valid_mask <- !is.na(forest_im)
+deer_valid <- deer_ppp[valid_mask]
+```
+```{r}
+# Plot the deer distribution and the forest cover in BC with valid window
+plot(deer_valid)
+plot(forest_im)
+```
+```{r}
+# Estimate rho for forest cover
+rho_forest <- rhohat(deer_valid, covariate = forest_im)
+
+# Plot $\rho$ vs. forest cover
+plot(rho_forest,
+main = "Estimated rho vs. Forest Cover",
+xlab = "Forest Cover (%)",
+ylab = expression(hat(rho)),
+xlim = c(0, 100))
+```
+### Fit the model
+#### Baseline linear model
+```{r}
+# Baseline model
+model_bl <- ppm(deer_valid ~ forest, covariates = list(forest = forest_im))
+summary(model_bl)
+```
+```{r}
+# Log-scaled fitted intensity surface of linear forest model
+plot(model_bl,
+     log = TRUE,
+     se = FALSE,
+     superimpose = FALSE,
+     n = 300,
+     main = "Log-scaled Fitted Deer Intensity – Linear Forest Cover")
+
+# Overlay observed deer points
+plot(deer_valid,
+     pch = 16,
+     cex = 0.4,
+     cols = "black",
+     add = TRUE)
+
+```
+Brighter areas indicate higher predicted intensity, mainly in regions with lower forest cover, though the pattern may oversimplify true deer distribution.
+  
+```{r}
+# Run the quadrat test on the baseline model
+quadrat_test <- quadrat.test(model_bl, nx = 4, ny = 2)
+quadrat_test
+```
+This indicates that the linear forest cover model doesn't fully capture the complexity of the deer distribution — likely because the intensity is not linearly related to forest cover, which we already suspected based on the rhohat() curve.  
+  
+#### Quadratic model
+```{r}
+# Fit the quadratic model
+model_quad <- ppm(deer_valid ~ polynom(forest, 2), covariates = list(forest = forest_im))
+summary(model_quad)
+```
+```{r}
+# Log-scaled fitted intensity surface of quadratic forest model
+plot(model_quad,
+     log = TRUE,
+     se = FALSE,
+     superimpose = FALSE,
+     n = 300,
+     main = "Log-scaled Fitted Deer Intensity – Quadratic Forest Cover")
+
+# Overlay observed deer points
+plot(deer_valid,
+     pch = 16,
+     cex = 0.4,
+     cols = "black",
+     add = TRUE)
+
+```
+```{r}
+# Run the quadrat test on the quadratic model
+quadrat_test <- quadrat.test(model_quad, nx = 4, ny = 2)
+quadrat_test
+```
+
+```{r}
+# Fit a higher-order polynomial
+model_poly4 <- ppm(deer_ppp ~ polynom(forest, 4), covariates = list(forest = forest_im))
+summary(model_poly4)
+```
+```{r}
+# Log-scaled fitted intensity surface of quadratic forest model
+plot(model_poly4,
+     log = TRUE,
+     se = FALSE,
+     superimpose = FALSE,
+     n = 300,
+     main = "Log-scaled Fitted Deer Intensity – Quadratic Forest Cover")
+
+# Overlay observed deer points
+plot(deer_valid,
+     pch = 16,
+     cex = 0.4,
+     cols = "black",
+     add = TRUE)
+
+```
+```{r}
+# Run the quadrat test on the quadratic model
+quadrat_test <- quadrat.test(model_poly4, nx = 4, ny = 2)
+quadrat_test
+```
+
+```{r}
+# Extract model coefficients
+coefs <- coef(model_poly4)
+vcov_mat <- vcov(model_poly4)
+
+# Create forest cover sequence
+forest_seq <- seq(0, 100, length.out = 300)
+X <- model.matrix(~ polynom(forest_seq, 4))
+
+# Compute log intensity and confidence intervals
+log_lambda_hat <- as.vector(X %*% coefs)
+se_log_lambda <- sqrt(rowSums((X %*% vcov_mat) * X))
+
+# Plot model prediction
+plot(rho_forest, 
+     main = "Model vs. rhohat: Deer Intensity vs. Forest Cover", 
+     xlab = "Forest Cover (%)", ylab = expression(hat(rho)))
+
+lines(forest_seq, exp(log_lambda_hat), col = "red", lwd = 2)
+lines(forest_seq, exp(log_lambda_hat + 2 * se_log_lambda), col = "red", lty = 2)
+lines(forest_seq, exp(log_lambda_hat - 2 * se_log_lambda), col = "red", lty = 2)
+
+legend("topright", legend = c("rhohat", "Model Prediction", "±2 SE"),
+       col = c("black", "red", "red"), lty = c(1,1,2), bty = "n")
+```
+It looks like despite the curve fitting the rho trend reasonably well, forest cover alone is not sufficient to capture where deer actually occur. The model assigns high intensity to these forests because it only "knows" forest, not geography or other limiting factors. Also, this is a non-stationary Poisson model, but it doesn’t account for spatial autocorrelation. It assumes deer only respond to forest, not elevation, population, or location-specific factors.
+
+
+
