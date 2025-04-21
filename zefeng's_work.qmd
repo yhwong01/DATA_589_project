@@ -32,7 +32,7 @@ rho_elev <- rhohat(deer_clean, elevation_im)
 plot(rho_elev, main = "Intensity of Deer vs Elevation")
 ```
 
-The nonparametric estimate of spatial intensity reveals that deer are most frequently observed at elevations around 1000 to 1500 meters, with several local peaks. The average intensity curve exceeds the global average in these regions, indicating elevation-specific habitat preferences. However, the wide confidence bands at the extremes—especially above 2000 meters—suggest high uncertainty due to sparse data, and these fluctuations should be interpreted cautiously.
+The nonparametric estimate of deer intensity as a function of elevation reveals a sharp unimodal pattern, with significantly elevated density at very low elevations (under 300 meters) and rapidly decreasing intensity as elevation increases. This supports the hypothesis that deer occurrences are highly concentrated in lowland regions across British Columbia.
 
 ### model
 
@@ -77,7 +77,7 @@ summary(model_quad)
 
 ```
 
-A Poisson point process model with elevation and elevation squared as covariates showed a significant nonlinear relationship between elevation and deer occurrence intensity. The negative linear and positive quadratic terms indicate a U-shaped pattern, with higher deer intensity at both low and high elevations. All coefficients were statistically significant, and the model effectively captured spatial variation in deer distribution driven by topography.
+The fitted inhomogeneous Poisson point process model, incorporating both linear and quadratic terms of elevation, revealed a statistically significant U-shaped relationship. Intensity was minimized at mid-elevations and higher at both low and high elevations. All coefficients were highly significant (p \< 0.001), supporting the inclusion of both terms. The model used logistic approximation and achieved convergence despite some missing covariate values at a small fraction of dummy points.
 
 ```{r}
 coefs <- coef(model_quad)
@@ -94,7 +94,7 @@ plot(elev_seq, intensity, type = "l", lwd = 2, col = "blue",
      main = "Fitted Intensity vs Elevation")
 ```
 
-elevation, where deer density is higher at both low and high elevations and lowest in mid-elevation zones. This pattern supports the model's nonlinear trend and suggests that elevation plays a significant role in shaping the spatial distribution of deer. The decline in intensity across mid-elevation areas may reflect habitat transitions or movement corridors, while the peaks at lower and higher elevations could correspond to preferred foraging or seasonal ranges. Overall, the model captures a meaningful ecological gradient linked to topography.
+The fitted intensity curve reveals a strong negative association between elevation and deer density. Deer are most likely to occur at lower elevations, with intensity decreasing sharply as elevation increases. This pattern suggests that elevation is a key environmental factor influencing the spatial distribution of deer, likely due to habitat preference, food availability, or accessibility at lower altitudes.
 
 ```{r}
 library(viridis)
@@ -108,7 +108,7 @@ plot(intensity_im,
 
 ```
 
-> The fitted intensity surface indicates that deer observations are spatially concentrated in specific southern and southeastern regions of British Columbia. These areas correspond to zones of either low or high elevation, as supported by the non-linear elevation model. Most of the province shows very low predicted intensity, suggesting deer are sparse in large portions of BC. The color scale confirms that intensity values are overall very low, reflecting the rare nature of sightings in this dataset.
+This fitted intensity surface shows that deer density is highest in low-elevation areas along the southern coast and river valleys of British Columbia. The intensity gradually declines across the province as elevation increases, particularly in mountainous interior regions. The spatial pattern supports the model’s inference that deer occurrences are concentrated in accessible, lowland environments.
 
 ```{r}
 library(ggplot2)
@@ -141,7 +141,9 @@ ggplot(df, aes(x = Elevation, y = Intensity)) +
     x = "Elevation (m)",
     y = "Predicted Intensity"
   ) +
-  coord_cartesian(ylim = c(0, 1e-8)) +
+  coord_cartesian(ylim = c(0, max(upper))) +
   theme_minimal(base_size = 14)
 
 ```
+
+The fitted intensity curve shows a steep decline with increasing elevation. Deer occurrences are most likely at lower elevations, with intensity dropping rapidly as elevation rises. Above approximately 1000 meters, the predicted intensity becomes very low and stable, suggesting that deer are largely concentrated in lower-altitude regions across British Columbia. The narrow confidence band at low elevations also indicates high certainty in this pattern.
