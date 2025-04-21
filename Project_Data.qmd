@@ -26,7 +26,7 @@ plot(forest_im)
 
 ```
 
-Get population data (No need to run if you have `pop_bc_proj.tif`)
+Get population data
 
 ```{r}
 library(raster)
@@ -44,15 +44,6 @@ pop_crop <- crop(pop_raw_terra, bc_wgs84_vect)  # Now they overlap
 
 # Reproject cropped pop to BC Albers (EPSG:3005)
 pop_proj <- project(pop_crop, "EPSG:3005", method = "bilinear")
-```
-
-Output population data (No need to run if you have `pop_bc_proj.tif`)
-
-```{r}
-
-pop_r <- raster(pop_proj)
-raster::writeRaster(pop_r, filename = "data/pop_bc_proj.tif", format = "GTiff", overwrite = TRUE)
-
 ```
 
 **Read population data**
@@ -98,12 +89,6 @@ plot(pop_im, main = "Resampled Population (Aligned to Forest)")
 ```
 
 ```{r}
-summary(pop_im$v)
-hist(pop_im$v, breaks = 100, main = "Population Density Histogram", xlab = "People per Pixel")
-
-```
-
-```{r}
 # Plot population with enhanced size and contrast
 plot(pop_im,
      main = "Population Density over BC",
@@ -116,12 +101,44 @@ plot(pop_im,
 # Overlay BC boundary
 plot(win_bc, add = TRUE, border = "black", lwd = 1)
 
+pop_km2 <- pop_im
+pop_km2$v <- pop_km2$v * 100
+plot(pop_km2,
+     main = "Population Density over BC (per km²)",
+     ribbon = TRUE,
+     col = terrain.colors(100),
+     useRaster = TRUE,
+     box = FALSE)
+plot(win_bc, add = TRUE, border = "black", lwd = 1)
 
 ```
 
+Scale data point size by population
+
 ```{r}
-summary(win_bc)
-summary(pop_im)
+# Convert pop_im (im) into point coordinates with values
+pop_df <- as.data.frame(pop_km2)
+pop_pts <- pop_df[!is.na(pop_df$value) & pop_df$value > 0, ]
+
+# Scale dot size by population (or use fixed size)
+pop_size <- sqrt(pop_pts$value) / 100  # previously was /20
+
+# Replot
+plot(win_bc, main = "Population Points over BC", border = "grey")
+points(pop_pts$x, pop_pts$y,
+       pch = 21,
+       bg = "green",
+       col = "black",
+       cex = pop_size)
+legend("topright",
+       legend = c("1,000", "5,000", "10,000", "20,000"),
+       pt.cex = sqrt(c(1000, 5000, 10000, 20000)) / 200,
+       pch = 21,
+       pt.bg = "green",
+       col = "black",
+       title = "People / km²",
+       bty = "n")
+
 
 ```
 
@@ -150,7 +167,13 @@ deer_ppp <- ppp(x = coords[, 1],
 plot(deer_ppp, main = "Deer Occurrences in BC (Projected)")
 ```
 
-**Reshape** `elevation_im`,`forest_im`,`pop_im`
+**Output `deer_ppp`, `forest_im`, `elevation_im`, `pop_im` for further modelling**
+
+```{r}
+save(deer_ppp, forest_im, elevation_im, pop_im, file = "data/deer_data.Rdata")
+```
+
+**Reshape `elevation_im`,`forest_im`,`pop_im` to modelling with three covariates.**
 
 ```{r}
 # Dimensions
@@ -208,79 +231,192 @@ save(deer_clean, forest_clean, elev_clean, pop_clean, valid_window,
      file = "data/deer_clean_covariates.RData")
 ```
 
+**Plot the point pattern against each covariate**
+
 ```{r}
-# Overlay valid_window on top of BC
-plot(win_bc, main = "Valid Covariate Window over BC", border = "grey70")
-plot(valid_window, add = TRUE, col = rgb(0, 0, 0, 0.4))  # transparent black
+# Standalone: Elevation only
+plot(elevation_im, main = "Elevation (No Overlay)")
+
+# Elevation + deer
+plot(elevation_im, main = "Elevation")
+plot(deer_ppp, add = TRUE, pch = 20, cex = 0.4, col = "green")
+
+# Standalone: Forest only
+plot(forest_im, main = "Forest Cover (No Overlay)")
+
+# Forest + deer
+plot(forest_im, main = "Forest Cover")
+plot(deer_ppp, add = TRUE, pch = 20, cex = 0.4, col = "green")
+
+# Standalone: Population only (as image)
+plot(win_bc, main = "Population Points over BC", border = "grey")
+points(pop_pts$x, pop_pts$y,
+       pch = 21,
+       bg = "blue",
+       col = "blue",
+       cex = pop_size)
+legend("topright",
+       legend = c("1,000", "5,000", "10,000", "20,000"),
+       pt.cex = sqrt(c(1000, 5000, 10000, 20000)) / 200,
+       pch = 21,
+       pt.bg = "blue",
+       col = "blue",
+       title = "People / km²",
+       bty = "n")
+
+# Population + deer overlay
+plot(win_bc, main = "Population Points over BC", border = "grey")
+points(pop_pts$x, pop_pts$y,
+       pch = 21,
+       bg = "blue",
+       col = "blue",
+       cex = pop_size)
+legend("topright",
+       legend = c("1,000", "5,000", "10,000", "20,000"),
+       pt.cex = sqrt(c(1000, 5000, 10000, 20000)) / 200,
+       pch = 21,
+       pt.bg = "blue",
+       col = "blue",
+       title = "People / km²",
+       bty = "n")
+plot(deer_ppp, add = TRUE, pch = 20, cex = 0.4, col = "green")
+
+```
+
+Most deer occurrences (green dots) cluster in low-elevation regions, particularly in the southern and coastal parts of BC. There are very few or no points in high-elevation areas (shown in blue-purple).
+
+Many deer points fall into medium forest coverage areas (orange to yellow). However, not all dense forest areas are heavily occupied — there's variation.
+
+Most deer points avoid densely populated areas (large blue circles). However, there is some overlap in sparsely populated areas, especially in the south and inland.
+
+**Quadrat Counting (inhomogeneity)**
+
+```{r}
+# Quadrat counting: divide the window into tiles
+Q <- quadratcount(deer_ppp, nx = 3, ny = 3)
+
+# Plot quadrat counts
+plot(deer_ppp, main = "Deer Occurrences with Quadrat Grid")
+plot(Q, add = TRUE, col = "red")
+
+# Chi-squared test of spatial homogeneity
+quadrat.test(Q)
+
+
+```
+
+The p-value \< 2.2e-16 strongly rejects the null hypothesis of Complete Spatial Randomness (CSR). So, deer are not evenly distributed — the intensity (λ) varies across BC. This confirms that modeling intensity as a function of covariates (like elevation, forest, population) is justified.
+
+**Nonparametric Relationship with Covariates**
+
+```{r}
+# Relationship with elevation
+rho_elev <- rhohat(deer_ppp, elevation_im)
+plot(rho_elev, main = "Deer Intensity vs. Elevation")
+
+# Relationship with forest cover
+rho_forest <- rhohat(deer_ppp, forest_im)
+plot(rho_forest, main = "Deer Intensity vs. Forest Cover")
+
+# Relationship with population density
+rho_pop <- rhohat(deer_ppp, pop_im)
+plot(rho_pop, main = "Deer Intensity vs. Population Density")
+
+```
+
+Deer intensity drops steeply as elevation increases. Most deer are found at low elevations, peaking around 0–200 meters. Deer prefer lowland areas, possibly due to milder climate, better forage, or habitat accessibility.
+
+Intensity is highest at low forest cover (0–20%), with smaller secondary peaks, then declines with higher forest density. Deer might prefer edge habitats or open-forest mosaics, rather than dense forest interiors.
+
+Very noisy plot. Some extreme values and uncertainty (wide CI bands), especially \>150 people/km². Suggests little to no clear relationship, but there's likely avoidance of highly populated areas. Most deer occur in low or sparsely populated regions.
+
+**Kernel Smoothing for Intensity Estimation**
+
+```{r}
+# Estimate intensity using default bandwidth
+lambda_hat <- density(deer_ppp)
+
+# Plot the smoothed intensity map
+plot(lambda_hat, main = "Kernel-Smoothed Deer Intensity")
+plot(deer_ppp, add = TRUE, pch = 20, cex = 0.2, col = adjustcolor("green", alpha.f = 0.3))
+
+```
+
+High Deer Intensity in Southern BC:
+
+The most prominent areas of high deer occurrence intensity are located in the southern part of British Columbia, particularly in the southwestern and southeastern corners. This aligns with regions where the terrain is lower in elevation, and forest cover is more extensive.
+
+Proximity to Urban and Populated Areas:
+
+Interestingly, some of the highest intensity zones also overlap with or are adjacent to urban centers. This suggests that deer occurrences are not entirely absent in or near developed areas — potentially due to edge habitats or the adaptability of deer to semi-urban environments.
+
+Sparse Intensity in the North and High Elevation Zones:
+
+The northern and interior mountainous regions show very low or zero intensity. This pattern likely reflects a combination of: Higher elevation (unsuitable habitat), Lower forest productivity, and Less human observation effort in remote regions.
+
+Clustering Indicates Inhomogeneity:
+
+The smoothed intensity clearly demonstrates spatial inhomogeneity in deer distribution — it is not uniform across the province. This justifies the need for modeling with spatial covariates like elevation, forest cover, and population density.
+
+**Now we have `deer_clean`, `forest_clean`, `elev_clean`, `pop_clean`. We could model with these covariates.**
+
+```{r}
+library(spatstat)
+library(splines)
+gam_model_poly <- ppm(deer_clean ~ bs(forest_clean, degree = 3) +
+                                   bs(elev_clean, degree = 3) +
+                                   bs(pop_clean, degree = 3),
+                       covariates = list(
+                           forest_clean = forest_clean,
+                           elev_clean = elev_clean,
+                           pop_clean = pop_clean))
+summary(gam_model_poly)
+
 
 ```
 
 ```{r}
-# Intersect with BC shape
-valid_window_bc <- intersect.owin(win_bc, valid_window)
-
-plot(win_bc, main = "Refined Valid Window (Inside BC Boundary)", border = "grey50")
-plot(valid_window_bc, add = TRUE, col = rgb(0, 0, 0, 0.4))
-
-```
-
-**Now we have `deer_ppp`, `forest_clean`, `elev_clean`, `pop_clean`. We could model with these covariates.**
-
-```{r}
-library(spatstat.model)
-model_forest <- ppm(deer_clean ~ forest_clean,
-                    covariates = list(forest_clean = forest_clean))
-summary(model_forest)
-
+plot(predict(gam_model_poly), main = "Predicted Deer Intensity")
+plot(win_bc, add = TRUE)
 ```
 
 ```{r}
-library(spatstat.model)
-
-# Generate dummy points only within valid region
-quad <- quadscheme(deer_clean, dummy = runifpoint(10000, win = valid_window))
-
-# Refit model using custom quadrature scheme
-model_forest_q <- ppm(Q = quad,
-                      trend = ~ forest_clean,
-                      covariates = list(forest_clean = forest_clean))
-summary(model_forest_q)
+gam_model_poly_2 <- ppm(deer_ppp ~ bs(forest_im, degree = 3) +
+                                   bs(elevation_im, degree = 3) +
+                                   bs(pop_im, degree = 3),
+                       covariates = list(
+                           forest_im = forest_im,
+                           elevation_im = elevation_im,
+                           pop_im = pop_im))
+summary(gam_model_poly_2)
 ```
 
 ```{r}
-# Mask image: only include where forest_clean is not NA
-forest_valid_mask <- im(!is.na(forest_clean$v), xcol = forest_clean$xcol, yrow = forest_clean$yrow)
-forest_valid_win <- as.owin(forest_valid_mask)
-
-# Generate dummy points *only* inside forest-valid region
-quad <- quadscheme(deer_clean, dummy = runifpoint(10000, win = forest_valid_win))
-
-# Refit model
-model_forest_q <- ppm(Q = quad,
-                      trend = ~ forest_clean,
-                      covariates = list(forest_clean = forest_clean))
-summary(model_forest_q)
+plot(predict(gam_model_poly_2), main = "Predicted Deer Intensity")
 
 ```
 
 ```{r}
-mask_im <- im(!is.na(forest_clean$v), xcol = forest_clean$xcol, yrow = forest_clean$yrow)
-valid_window <- as.owin(mask_im)
-
-quad <- quadscheme(deer_trimmed, dummy = runifpoint(5000, win = valid_window))
-mask_im_valid <- im(!is.na(forest_clean$v), xcol = forest_clean$xcol, yrow = forest_clean$yrow)
-valid_win <- as.owin(mask_im_valid)
-quad <- quadscheme(deer_trimmed, dummy = runifpoint(5000, win = valid_win))
-
-model_forest_q <- ppm(Q = quad,
-                      trend = ~ forest_clean,
-                      covariates = list(forest_clean = forest_clean))
-summary(model_forest_q)
+pop_clean_0 <- pop_clean
+pop_clean_0$v[is.na(pop_clean_0$v)] <- 0
+gam_model_pop0 <- ppm(deer_clean ~ bs(forest_clean, degree = 3) +
+                                      bs(elev_clean, degree = 3) +
+                                      bs(pop_clean_0, degree = 3),
+                      covariates = list(
+                          forest_clean = forest_clean,
+                          elev_clean = elev_clean,
+                          pop_clean_0 = pop_clean_0))
+summary(gam_model_pop0)
 ```
 
 ```{r}
-plot(predict(model_forest_q), main = "Fitted Intensity: Deer ~ Forest Cover")
-rhohat(deer_trimmed, forest_clean)
-plot(rhohat(deer_trimmed, forest_clean), main = "Intensity vs Forest Cover")
+plot(pop_im)
+```
+
+```{r}
+range(pop_im$xcol)
+range(pop_im$yrow)
+range(forest_im$xcol)
+range(elevation_im$xcol)
 
 ```
