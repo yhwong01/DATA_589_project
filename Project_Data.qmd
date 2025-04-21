@@ -60,6 +60,9 @@ raster::writeRaster(pop_r, filename = "data/pop_bc_proj.tif", format = "GTiff", 
 ```{r}
 library(terra)
 
+bc_proj_vect <- vect(win_bc_sf)  # Back in EPSG:3005
+pop_masked <- mask(pop_proj, bc_proj_vect)
+
 # Convert forest_im to terra raster (template)
 forest_r <- rast(
   nrows = nrow(forest_im$v), 
@@ -70,10 +73,10 @@ forest_r <- rast(
 )
 
 # Read population raster (already in EPSG:3005)
-pop_r_terra <- rast("data/pop_bc_proj.tif")
+# pop_r_terra <- rast("data/pop_bc_proj.tif")
 
 # Resample population raster to forest resolution
-pop_resampled <- resample(pop_r_terra, forest_r, method = "bilinear")
+pop_resampled <- resample(pop_masked, forest_r, method = "bilinear")
 
 # Convert to matrix and then im object
 vals <- terra::as.matrix(pop_resampled, wide = TRUE)
@@ -91,6 +94,34 @@ pop_im <- im(
 
 # check and plot
 plot(pop_im, main = "Resampled Population (Aligned to Forest)")
+
+```
+
+```{r}
+summary(pop_im$v)
+hist(pop_im$v, breaks = 100, main = "Population Density Histogram", xlab = "People per Pixel")
+
+```
+
+```{r}
+# Plot population with enhanced size and contrast
+plot(pop_im,
+     main = "Population Density over BC",
+     ribbon = TRUE,
+     col = terrain.colors(100),    # Optional: better colormap
+     scale = TRUE,
+     useRaster = TRUE,             # Force raster-style plotting (faster and sharp)
+     box = FALSE)
+
+# Overlay BC boundary
+plot(win_bc, add = TRUE, border = "black", lwd = 1)
+
+
+```
+
+```{r}
+summary(win_bc)
+summary(pop_im)
 
 ```
 
@@ -175,6 +206,21 @@ deer_clean <- deer_ppp[valid_window]
 
 save(deer_clean, forest_clean, elev_clean, pop_clean, valid_window,
      file = "data/deer_clean_covariates.RData")
+```
+
+```{r}
+# Overlay valid_window on top of BC
+plot(win_bc, main = "Valid Covariate Window over BC", border = "grey70")
+plot(valid_window, add = TRUE, col = rgb(0, 0, 0, 0.4))  # transparent black
+
+```
+
+```{r}
+# Intersect with BC shape
+valid_window_bc <- intersect.owin(win_bc, valid_window)
+
+plot(win_bc, main = "Refined Valid Window (Inside BC Boundary)", border = "grey50")
+plot(valid_window_bc, add = TRUE, col = rgb(0, 0, 0, 0.4))
 
 ```
 
