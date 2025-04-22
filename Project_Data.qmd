@@ -1,6 +1,8 @@
 ---
 title: "Project_Dataset"
-format: html
+format: 
+  html:
+    embed-resources: true
 editor: visual
 ---
 
@@ -26,7 +28,7 @@ plot(forest_im)
 
 ```
 
-Get population data
+**Get population data**
 
 ```{r}
 library(raster)
@@ -62,9 +64,6 @@ forest_r <- rast(
   ymin = forest_im$yrange[1], ymax = forest_im$yrange[2],
   crs = "EPSG:3005"
 )
-
-# Read population raster (already in EPSG:3005)
-# pop_r_terra <- rast("data/pop_bc_proj.tif")
 
 # Resample population raster to forest resolution
 pop_resampled <- resample(pop_masked, forest_r, method = "bilinear")
@@ -173,7 +172,7 @@ plot(deer_ppp, main = "Deer Occurrences in BC (Projected)")
 save(deer_ppp, forest_im, elevation_im, pop_im, file = "data/deer_data.Rdata")
 ```
 
-**Reshape `elevation_im`,`forest_im`,`pop_im` to modelling with three covariates.**
+**Reshape `elevation_im`,`forest_im`,`pop_im` to modelling with three covariates if needed.**
 
 ```{r}
 # Dimensions
@@ -230,6 +229,8 @@ deer_clean <- deer_ppp[valid_window]
 save(deer_clean, forest_clean, elev_clean, pop_clean, valid_window,
      file = "data/deer_clean_covariates.RData")
 ```
+
+**Data Visualization**
 
 **Plot the point pattern against each covariate**
 
@@ -305,7 +306,7 @@ quadrat.test(Q)
 
 ```
 
-The p-value \< 2.2e-16 strongly rejects the null hypothesis of Complete Spatial Randomness (CSR). So, deer are not evenly distributed — the intensity (λ) varies across BC. This confirms that modeling intensity as a function of covariates (like elevation, forest, population) is justified.
+The p-value \< 2.2e-16 strongly rejects the null hypothesis of Complete Spatial Randomness (CSR). So, deer are not evenly distributed — the intensity ($\lambda$) varies across BC. This confirms that modeling intensity as a function of covariates (like elevation, forest, population) is justified.
 
 **Nonparametric Relationship with Covariates**
 
@@ -357,66 +358,3 @@ The northern and interior mountainous regions show very low or zero intensity. T
 Clustering Indicates Inhomogeneity:
 
 The smoothed intensity clearly demonstrates spatial inhomogeneity in deer distribution — it is not uniform across the province. This justifies the need for modeling with spatial covariates like elevation, forest cover, and population density.
-
-**Now we have `deer_clean`, `forest_clean`, `elev_clean`, `pop_clean`. We could model with these covariates.**
-
-```{r}
-library(spatstat)
-library(splines)
-gam_model_poly <- ppm(deer_clean ~ bs(forest_clean, degree = 3) +
-                                   bs(elev_clean, degree = 3) +
-                                   bs(pop_clean, degree = 3),
-                       covariates = list(
-                           forest_clean = forest_clean,
-                           elev_clean = elev_clean,
-                           pop_clean = pop_clean))
-summary(gam_model_poly)
-
-
-```
-
-```{r}
-plot(predict(gam_model_poly), main = "Predicted Deer Intensity")
-plot(win_bc, add = TRUE)
-```
-
-```{r}
-gam_model_poly_2 <- ppm(deer_ppp ~ bs(forest_im, degree = 3) +
-                                   bs(elevation_im, degree = 3) +
-                                   bs(pop_im, degree = 3),
-                       covariates = list(
-                           forest_im = forest_im,
-                           elevation_im = elevation_im,
-                           pop_im = pop_im))
-summary(gam_model_poly_2)
-```
-
-```{r}
-plot(predict(gam_model_poly_2), main = "Predicted Deer Intensity")
-
-```
-
-```{r}
-pop_clean_0 <- pop_clean
-pop_clean_0$v[is.na(pop_clean_0$v)] <- 0
-gam_model_pop0 <- ppm(deer_clean ~ bs(forest_clean, degree = 3) +
-                                      bs(elev_clean, degree = 3) +
-                                      bs(pop_clean_0, degree = 3),
-                      covariates = list(
-                          forest_clean = forest_clean,
-                          elev_clean = elev_clean,
-                          pop_clean_0 = pop_clean_0))
-summary(gam_model_pop0)
-```
-
-```{r}
-plot(pop_im)
-```
-
-```{r}
-range(pop_im$xcol)
-range(pop_im$yrow)
-range(forest_im$xcol)
-range(elevation_im$xcol)
-
-```
