@@ -9,10 +9,9 @@ editor: visual
 ## Load .Rdata
 
 ```{r}
-#file.exists("C:/DATA_589/project/data/deer_data.Rdata")
-#load("C:/DATA_589/project/data/deer_data.Rdata")
+file.exists("C:/DATA_589/project/data/deer_data.Rdata")
+load("C:/DATA_589/project/data/deer_data.Rdata")
 
-load("data/deer_data.Rdata")
 pop_clean<-pop_im
 str(pop_clean)
 
@@ -75,10 +74,10 @@ plot(model_pop, which = 1:4)
 
 # Lurking variable plot
 par(mfrow = c(1, 1))
-lurking(model_pop, covariate = pop_filled, cumulative = TRUE)
+lurking(model_pop, covariate = pop_im, cumulative = TRUE)
 
 # Rho function (nonparametric covariate check)
-rho_pop <- rhohat(deer_ppp, covariate = pop_filled)
+rho_pop <- rhohat(deer_ppp, covariate = pop_im)
 plot(rho_pop, 
      main = expression(paste(rho, "-function: Deer Intensity vs Population")),
      xlab = "Population", ylab = "Relative Intensity")
@@ -104,8 +103,8 @@ effectfun(model_pop, "pop", se.fit = FALSE,
 
 # Plot effect of population (intensity scale)
 curve(exp(coef(model_pop)[1] + coef(model_pop)[2] * x),
-      from = min(pop_filled$v, na.rm = TRUE), 
-      to = max(pop_filled$v, na.rm = TRUE),
+      from = min(pop_im$v, na.rm = TRUE), 
+      to = max(pop_im$v, na.rm = TRUE),
       xlab = "Population", ylab = "Estimated Intensity",
       main = "Estimated Intensity vs Population (model_pop)")
 ```
@@ -219,3 +218,52 @@ curve(exp(coef(model_fixed)[1] + coef(model_fixed)[2] * x),
 ## Summary on model_fixed (model with smoothed population)
 
 The fitted model `model_fixed` is a Poisson point process model estimating deer intensity as a function of population. The population coefficient is 0.216, indicating that deer intensity increases by about 24% per unit increase in population. The effect is highly significant (p \< 2.2e-16), confirming that population improves model fit. However, a chi-squared goodness-of-fit test shows lack of fit (χ² = 57,482, p \< 2.2e-16), suggesting population alone does not fully explain the spatial pattern. Additional covariates or spatial structure may be needed.
+
+```{r}
+library(spatstat)
+library(viridis)
+pop_log <- eval.im(log(pop_smoothed + 1e-3))
+
+# Step 2: Visualize the log-transformed covariate
+plot(pop_log, 
+     main = "Log-scaled Smoothed Population Density",
+     col = viridis(100))
+
+# Step 3: Fit Poisson point process model using log-transformed population
+model_pop_log <- ppm(deer_ppp ~ pop, covariates = list(pop = pop_log))
+
+# Step 4: Summarize the model
+summary(model_pop_log)
+
+#LRT
+anova(model_null, model_pop_log, test = "LRT")
+
+# Step 5: Goodness-of-fit test
+qtest_log <- quadrat.test(model_pop_log, nx = 5, ny = 5)
+print(qtest_log)
+plot(qtest_log, main = "Quadrat Test (log-pop model)")
+
+# Step 6: Residual diagnostics
+par(mfrow = c(2, 2))
+plot(model_pop_log, which = 1:4)
+
+# Step 7: Visualize predicted log intensity
+plot(predict(model_pop_log, n = 512), 
+     log = TRUE, 
+     main = "Predicted Log Intensity (log-pop model)")
+plot(deer_ppp, add = TRUE, cols = "red", pch = ".")
+
+# Step 8: Effect plot of log(population)
+effectfun(model_pop_log, "pop", se.fit = FALSE, 
+          main = "Effect of Log(Population) on Log Intensity",
+          xlab = "Log(Population + 1e-3)", ylab = "Log Intensity")
+
+# Step 9: Compare AIC with other models (if available)
+AIC(model_pop, model_pop_log, model_fixed)
+```
+
+```{r}
+AIC(model_pop)
+AIC(model_pop_log)
+AIC(model_fixed)
+```

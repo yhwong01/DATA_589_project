@@ -4008,12 +4008,33 @@ Fitted exp(theta):
  (Intercept)          pop 
 4.383450e-07 2.192258e+00 </code></pre>
 </div>
-<div class="sourceCode cell-code" id="cb102"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb102-1"><a href="#cb102-1" aria-hidden="true" tabindex="-1"></a><span class="co"># Step 5: Goodness-of-fit test</span></span>
-<span id="cb102-2"><a href="#cb102-2" aria-hidden="true" tabindex="-1"></a>qtest_log <span class="ot">&lt;-</span> <span class="fu">quadrat.test</span>(model_pop_log, <span class="at">nx =</span> <span class="dv">5</span>, <span class="at">ny =</span> <span class="dv">5</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="sourceCode cell-code" id="cb102"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb102-1"><a href="#cb102-1" aria-hidden="true" tabindex="-1"></a><span class="co">#LRT</span></span>
+<span id="cb102-2"><a href="#cb102-2" aria-hidden="true" tabindex="-1"></a><span class="fu">anova</span>(model_null, model_pop_log, <span class="at">test =</span> <span class="st">"LRT"</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="cell-output cell-output-stderr">
+<pre><code>Warning in countingweights(id, areas): some tiles with positive area do not
+contain any quadrature points: relative error = 1.2%</code></pre>
+</div>
+<div class="cell-output cell-output-stderr">
+<pre><code>Warning in countingweights(id, areas): some tiles with positive area do not
+contain any quadrature points: relative error = 1.2%</code></pre>
+</div>
+<div class="cell-output cell-output-stdout">
+<pre><code>Analysis of Deviance Table
+
+Model 1: ~1      Poisson
+Model 2: ~pop    Poisson
+  Npar Df Deviance  Pr(&gt;Chi)    
+1    1                          
+2    2  1    72366 &lt; 2.2e-16 ***
+---
+Signif. codes:  0 '***' 0.001 '**' 0.01 '*' 0.05 '.' 0.1 ' ' 1</code></pre>
+</div>
+<div class="sourceCode cell-code" id="cb106"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb106-1"><a href="#cb106-1" aria-hidden="true" tabindex="-1"></a><span class="co"># Step 5: Goodness-of-fit test</span></span>
+<span id="cb106-2"><a href="#cb106-2" aria-hidden="true" tabindex="-1"></a>qtest_log <span class="ot">&lt;-</span> <span class="fu">quadrat.test</span>(model_pop_log, <span class="at">nx =</span> <span class="dv">5</span>, <span class="at">ny =</span> <span class="dv">5</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 <div class="cell-output cell-output-stderr">
 <pre><code>Warning: Some expected counts are small; chi^2 approximation may be inaccurate</code></pre>
 </div>
-<div class="sourceCode cell-code" id="cb104"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb104-1"><a href="#cb104-1" aria-hidden="true" tabindex="-1"></a><span class="fu">print</span>(qtest_log)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="sourceCode cell-code" id="cb108"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb108-1"><a href="#cb108-1" aria-hidden="true" tabindex="-1"></a><span class="fu">print</span>(qtest_log)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 <div class="cell-output cell-output-stdout">
 <pre><code>
     Chi-squared test of fitted Poisson model 'model_pop_log' using quadrat
@@ -4025,7 +4046,7 @@ alternative hypothesis: two.sided
 
 Quadrats: 21 tiles (irregular windows)</code></pre>
 </div>
-<div class="sourceCode cell-code" id="cb106"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb106-1"><a href="#cb106-1" aria-hidden="true" tabindex="-1"></a><span class="fu">plot</span>(qtest_log, <span class="at">main =</span> <span class="st">"Quadrat Test (log-pop model)"</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="sourceCode cell-code" id="cb110"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb110-1"><a href="#cb110-1" aria-hidden="true" tabindex="-1"></a><span class="fu">plot</span>(qtest_log, <span class="at">main =</span> <span class="st">"Quadrat Test (log-pop model)"</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 <div class="cell-output-display">
 <div>
 <figure class="figure">
@@ -4033,23 +4054,23 @@ Quadrats: 21 tiles (irregular windows)</code></pre>
 </figure>
 </div>
 </div>
-<div class="sourceCode cell-code" id="cb107"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb107-1"><a href="#cb107-1" aria-hidden="true" tabindex="-1"></a><span class="co"># Step 6: Residual diagnostics</span></span>
-<span id="cb107-2"><a href="#cb107-2" aria-hidden="true" tabindex="-1"></a><span class="fu">par</span>(<span class="at">mfrow =</span> <span class="fu">c</span>(<span class="dv">2</span>, <span class="dv">2</span>))</span>
-<span id="cb107-3"><a href="#cb107-3" aria-hidden="true" tabindex="-1"></a><span class="fu">plot</span>(model_pop_log, <span class="at">which =</span> <span class="dv">1</span><span class="sc">:</span><span class="dv">4</span>)</span>
-<span id="cb107-4"><a href="#cb107-4" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb107-5"><a href="#cb107-5" aria-hidden="true" tabindex="-1"></a><span class="co"># Step 7: Visualize predicted log intensity</span></span>
-<span id="cb107-6"><a href="#cb107-6" aria-hidden="true" tabindex="-1"></a><span class="fu">plot</span>(<span class="fu">predict</span>(model_pop_log, <span class="at">n =</span> <span class="dv">512</span>), </span>
-<span id="cb107-7"><a href="#cb107-7" aria-hidden="true" tabindex="-1"></a>     <span class="at">log =</span> <span class="cn">TRUE</span>, </span>
-<span id="cb107-8"><a href="#cb107-8" aria-hidden="true" tabindex="-1"></a>     <span class="at">main =</span> <span class="st">"Predicted Log Intensity (log-pop model)"</span>)</span>
-<span id="cb107-9"><a href="#cb107-9" aria-hidden="true" tabindex="-1"></a><span class="fu">plot</span>(deer_ppp, <span class="at">add =</span> <span class="cn">TRUE</span>, <span class="at">cols =</span> <span class="st">"red"</span>, <span class="at">pch =</span> <span class="st">"."</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="sourceCode cell-code" id="cb111"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb111-1"><a href="#cb111-1" aria-hidden="true" tabindex="-1"></a><span class="co"># Step 6: Residual diagnostics</span></span>
+<span id="cb111-2"><a href="#cb111-2" aria-hidden="true" tabindex="-1"></a><span class="fu">par</span>(<span class="at">mfrow =</span> <span class="fu">c</span>(<span class="dv">2</span>, <span class="dv">2</span>))</span>
+<span id="cb111-3"><a href="#cb111-3" aria-hidden="true" tabindex="-1"></a><span class="fu">plot</span>(model_pop_log, <span class="at">which =</span> <span class="dv">1</span><span class="sc">:</span><span class="dv">4</span>)</span>
+<span id="cb111-4"><a href="#cb111-4" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb111-5"><a href="#cb111-5" aria-hidden="true" tabindex="-1"></a><span class="co"># Step 7: Visualize predicted log intensity</span></span>
+<span id="cb111-6"><a href="#cb111-6" aria-hidden="true" tabindex="-1"></a><span class="fu">plot</span>(<span class="fu">predict</span>(model_pop_log, <span class="at">n =</span> <span class="dv">512</span>), </span>
+<span id="cb111-7"><a href="#cb111-7" aria-hidden="true" tabindex="-1"></a>     <span class="at">log =</span> <span class="cn">TRUE</span>, </span>
+<span id="cb111-8"><a href="#cb111-8" aria-hidden="true" tabindex="-1"></a>     <span class="at">main =</span> <span class="st">"Predicted Log Intensity (log-pop model)"</span>)</span>
+<span id="cb111-9"><a href="#cb111-9" aria-hidden="true" tabindex="-1"></a><span class="fu">plot</span>(deer_ppp, <span class="at">add =</span> <span class="cn">TRUE</span>, <span class="at">cols =</span> <span class="st">"red"</span>, <span class="at">pch =</span> <span class="st">"."</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 <div class="cell-output cell-output-stderr">
 <pre><code>Warning in plot.ppp(deer_ppp, add = TRUE, cols = "red", pch = "."): 424 illegal
 points also plotted</code></pre>
 </div>
-<div class="sourceCode cell-code" id="cb109"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb109-1"><a href="#cb109-1" aria-hidden="true" tabindex="-1"></a><span class="co"># Step 8: Effect plot of log(population)</span></span>
-<span id="cb109-2"><a href="#cb109-2" aria-hidden="true" tabindex="-1"></a><span class="fu">effectfun</span>(model_pop_log, <span class="st">"pop"</span>, <span class="at">se.fit =</span> <span class="cn">FALSE</span>, </span>
-<span id="cb109-3"><a href="#cb109-3" aria-hidden="true" tabindex="-1"></a>          <span class="at">main =</span> <span class="st">"Effect of Log(Population) on Log Intensity"</span>,</span>
-<span id="cb109-4"><a href="#cb109-4" aria-hidden="true" tabindex="-1"></a>          <span class="at">xlab =</span> <span class="st">"Log(Population + 1e-3)"</span>, <span class="at">ylab =</span> <span class="st">"Log Intensity"</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="sourceCode cell-code" id="cb113"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb113-1"><a href="#cb113-1" aria-hidden="true" tabindex="-1"></a><span class="co"># Step 8: Effect plot of log(population)</span></span>
+<span id="cb113-2"><a href="#cb113-2" aria-hidden="true" tabindex="-1"></a><span class="fu">effectfun</span>(model_pop_log, <span class="st">"pop"</span>, <span class="at">se.fit =</span> <span class="cn">FALSE</span>, </span>
+<span id="cb113-3"><a href="#cb113-3" aria-hidden="true" tabindex="-1"></a>          <span class="at">main =</span> <span class="st">"Effect of Log(Population) on Log Intensity"</span>,</span>
+<span id="cb113-4"><a href="#cb113-4" aria-hidden="true" tabindex="-1"></a>          <span class="at">xlab =</span> <span class="st">"Log(Population + 1e-3)"</span>, <span class="at">ylab =</span> <span class="st">"Log Intensity"</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 <div class="cell-output cell-output-stdout">
 <pre><code>Function value object (class 'fv')
 for the function pop -&gt; lambda(pop)
@@ -4063,8 +4084,8 @@ where "." stands for 'lambda'
 Recommended range of argument pop: [-6.9078, 3.624]
 Available range of argument pop: [-6.9078, 3.624]</code></pre>
 </div>
-<div class="sourceCode cell-code" id="cb111"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb111-1"><a href="#cb111-1" aria-hidden="true" tabindex="-1"></a><span class="co"># Step 9: Compare AIC with other models (if available)</span></span>
-<span id="cb111-2"><a href="#cb111-2" aria-hidden="true" tabindex="-1"></a><span class="fu">AIC</span>(model_pop, model_pop_log, model_fixed)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="sourceCode cell-code" id="cb115"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb115-1"><a href="#cb115-1" aria-hidden="true" tabindex="-1"></a><span class="co"># Step 9: Compare AIC with other models (if available)</span></span>
+<span id="cb115-2"><a href="#cb115-2" aria-hidden="true" tabindex="-1"></a><span class="fu">AIC</span>(model_pop, model_pop_log, model_fixed)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 <div class="cell-output cell-output-stdout">
 <pre><code>[1] 217686.2</code></pre>
 </div>
@@ -4074,6 +4095,20 @@ Available range of argument pop: [-6.9078, 3.624]</code></pre>
 <p><img src="589_project_ernest_files/figure-html/unnamed-chunk-9-3.png" class="img-fluid figure-img" width="672"></p>
 </figure>
 </div>
+</div>
+</div>
+<div class="cell">
+<div class="sourceCode cell-code" id="cb117"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb117-1"><a href="#cb117-1" aria-hidden="true" tabindex="-1"></a><span class="fu">AIC</span>(model_pop)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="cell-output cell-output-stdout">
+<pre><code>[1] 217686.2</code></pre>
+</div>
+<div class="sourceCode cell-code" id="cb119"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb119-1"><a href="#cb119-1" aria-hidden="true" tabindex="-1"></a><span class="fu">AIC</span>(model_pop_log)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="cell-output cell-output-stdout">
+<pre><code>[1] 351444.3</code></pre>
+</div>
+<div class="sourceCode cell-code" id="cb121"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb121-1"><a href="#cb121-1" aria-hidden="true" tabindex="-1"></a><span class="fu">AIC</span>(model_fixed)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="cell-output cell-output-stdout">
+<pre><code>[1] 408013.1</code></pre>
 </div>
 </div>
 </section>
