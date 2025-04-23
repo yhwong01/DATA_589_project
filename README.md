@@ -3,6 +3,10 @@
 **DATA 589 Project**  
 **Team:** Shiqi Zhang, Jiakun Li, Ernest Wong, Zefeng Pei  
 
+### See our project presentation: [Google Slides](https://docs.google.com/presentation/d/1zm0EeMhrbMxSbx7flz2MLp8R3iqKiiuxFAKzXRSirMU/edit?usp=sharing)
+
+<img src="https://github.com/user-attachments/assets/bd12e3e8-5b7e-4d70-a7c7-7935a9f8ad85" alt="Description" width="400"/>
+
 ---
 
 ## Overview
