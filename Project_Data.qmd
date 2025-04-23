@@ -6,7 +6,7 @@ format:
 editor: visual
 ---
 
-**Get BC Boundary**
+### **Get BC Boundary**
 
 ```{r}
 library(sf)
@@ -18,7 +18,7 @@ win_bc <- as.owin(win_bc_sf)
 plot(win_bc)
 ```
 
-**Get Elevation and Forest Cover**
+### **Get Elevation and Forest Cover**
 
 ```{r}
 elevation_im <- as.im(DATA$Elevation)
@@ -28,7 +28,7 @@ plot(forest_im)
 
 ```
 
-**Get population data**
+### **Get population data**
 
 ```{r}
 library(raster)
@@ -48,7 +48,7 @@ pop_crop <- crop(pop_raw_terra, bc_wgs84_vect)  # Now they overlap
 pop_proj <- project(pop_crop, "EPSG:3005", method = "bilinear")
 ```
 
-**Read population data**
+### **Read population data**
 
 ```{r}
 library(terra)
@@ -112,7 +112,7 @@ plot(win_bc, add = TRUE, border = "black", lwd = 1)
 
 ```
 
-Scale data point size by population
+#### Scale data point size by population
 
 ```{r}
 # Convert pop_im (im) into point coordinates with values
@@ -141,7 +141,7 @@ legend("topright",
 
 ```
 
-**Get deer data**
+### **Get deer data**
 
 ```{r}
 library(readr)
@@ -166,13 +166,13 @@ deer_ppp <- ppp(x = coords[, 1],
 plot(deer_ppp, main = "Deer Occurrences in BC (Projected)")
 ```
 
-**Output `deer_ppp`, `forest_im`, `elevation_im`, `pop_im` for further modelling**
+### **Output `deer_ppp`, `forest_im`, `elevation_im`, `pop_im` for further modelling**
 
 ```{r}
 save(deer_ppp, forest_im, elevation_im, pop_im, file = "data/deer_data.Rdata")
 ```
 
-**Reshape `elevation_im`,`forest_im`,`pop_im` to modelling with three covariates if needed.**
+### **Reshape `elevation_im`,`forest_im`,`pop_im` to modelling with three covariates if needed.**
 
 ```{r}
 # Dimensions
@@ -230,9 +230,9 @@ save(deer_clean, forest_clean, elev_clean, pop_clean, valid_window,
      file = "data/deer_clean_covariates.RData")
 ```
 
-**Data Visualization**
+### **Data Visualization**
 
-**Plot the point pattern against each covariate**
+### **Plot the point pattern against each covariate**
 
 ```{r}
 # Standalone: Elevation only
@@ -290,7 +290,7 @@ Many deer points fall into medium forest coverage areas (orange to yellow). Howe
 
 Most deer points avoid densely populated areas (large blue circles). However, there is some overlap in sparsely populated areas, especially in the south and inland.
 
-**Quadrat Counting (inhomogeneity)**
+### **Quadrat Counting (inhomogeneity)**
 
 ```{r}
 # Quadrat counting: divide the window into tiles
@@ -308,7 +308,7 @@ quadrat.test(Q)
 
 The p-value \< 2.2e-16 strongly rejects the null hypothesis of Complete Spatial Randomness (CSR). So, deer are not evenly distributed — the intensity ($\lambda$) varies across BC. This confirms that modeling intensity as a function of covariates (like elevation, forest, population) is justified.
 
-**Nonparametric Relationship with Covariates**
+### **Nonparametric Relationship with Covariates**
 
 ```{r}
 # Relationship with elevation
@@ -331,7 +331,7 @@ Intensity is highest at low forest cover (0–20%), with smaller secondary peaks
 
 Very noisy plot. Some extreme values and uncertainty (wide CI bands), especially \>150 people/km². Suggests little to no clear relationship, but there's likely avoidance of highly populated areas. Most deer occur in low or sparsely populated regions.
 
-**Kernel Smoothing for Intensity Estimation**
+### **Kernel Smoothing for Intensity Estimation**
 
 ```{r}
 # Estimate intensity using default bandwidth
