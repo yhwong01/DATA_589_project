@@ -153,7 +153,7 @@ deer_valid <- deer_ppp[valid_mask]
 ```
 
 ### Fit the Polynomial Model
-#### Multivariate point process model with a 4th-degree polynomial for forest cover, and quadratic terms for elevation and population density
+#### Multivariate point process model with a 3th-degree polynomial for forest cover, and quadratic terms for elevation and population density
 ```{r}
 model_poly3cov <- ppm(deer_valid ~ polynom(forest, 3) + polynom(elev, 2) + polynom(pop, 2),
                       covariates = list(forest = forest_masked,
@@ -199,11 +199,13 @@ main = "Log-scaled Predicted Deer Intensity")
 # Overlay observed park locations
 plot(deer_valid,
 pch = 16,
-cex = 0.3,
+cex = 0.2,
 cols = "black",
 add = TRUE)
 ```
-The Pearson residual plot reveals that residuals are uniformly negative across the study area, indicating that the model consistently underpredicts deer occurrences. This is further supported by the log-scaled predicted intensity map, where predicted values remain extremely low (as small as 1e–15) even in regions with many observed deer. Together, these plots suggest the current model fails to capture the true spatial intensity of deer distribution, particularly in known high-density areas.
+The Pearson residual plot shows that residuals are uniformly yellow across BC — that indicates it’s pretty good capturing the trends.
+ 
+In the log-scaled predicted intensity map, the predicted values don't match the observed deer well. The overall intensity is generally higher, but the gradient is more diffuse — it doesn’t distinguish dense areas from sparse ones very well. We see large regions with moderate predictions, even in places where deer presence is low.
 
 ### Fit the Polynomial Model with Log-transformed Population
 ```{r}
@@ -260,7 +262,11 @@ plot(res,
 ```
 This version of the model with log-transformed population is a clear improvement:
   
-The updated model incorporating log(pop) as a covariate significantly improves prediction quality. The log-scaled predicted intensity map now reveals a stronger spatial structure, with higher predicted deer intensity aligning better with known occurrence areas, particularly in southern BC and coastal regions. The Pearson residuals are more balanced and closer to zero overall, suggesting improved fit and less systematic underprediction. Additionally, the AIC decreased notably to 346,672, and the quadrat test chi-squared statistic dropped to 2,115.1, further indicating that the model captures more of the spatial variation in deer distribution compared to previous versions.
+The updated model incorporating log(pop) as a covariate significantly improves prediction quality. The log-scaled predicted intensity map now reveals a stronger spatial structure, with higher predicted deer intensity aligning better with known occurrence areas, particularly in southern BC and coastal regions. It sharpens the spatial contrast: areas with actual deer observations light up more clearly in orange, and low-density regions fade to deep blue. This cleaner separation better reflects the actual distribution of deer across BC.
+  
+The Pearson residuals are still very balanced and closer to zero overall, suggesting capturing the trends well. Additionally, the AIC decreased notably to 346,672, and the quadrat test chi-squared statistic dropped to 2,115.1, further indicating that the model captures more of the spatial variation in deer distribution compared to previous versions.
+  
+So statistically and visually, applying the log transformation on population dramatically improves spatial alignment and clarity of the predicted intensity. 
 
 ### Assess Spatial Autocorrelation
 ```{r}
@@ -367,7 +373,7 @@ colnames(deer_df) <- c("x", "y")
 ggplot(gam_data, aes(x = x, y = y, fill = log_lambda_pred)) +
   geom_tile() +
   geom_point(data = deer_df, aes(x = x, y = y),
-             color = "black", size = 0.2, alpha = 0.3, inherit.aes = FALSE) +
+             color = "orange", size = 0.2, alpha = 0.3, inherit.aes = FALSE) +
   coord_equal() +
   scale_fill_viridis_c(name = "Log Intensity") +
   labs(title = "GAM-Smooth Predicted Log Deer Intensity with Observed Points") +
@@ -375,7 +381,10 @@ ggplot(gam_data, aes(x = x, y = y, fill = log_lambda_pred)) +
 
 ```
 
-The GAM-smoothed intensity surface highlights concentrated regions of predicted deer presence, especially in southern BC. The flexible smooth terms capture nonlinear relationships between deer density and environmental covariates, with clearer spatial structure and more nuanced intensity variation compared to the earlier Poisson model.
+For the intensity map based on the GAM model, the brighter areas represent higher predicted intensity. 
+We show the same map below, but now with the actual observed deer locations overlaid in orange. We can see that the brighter areas do align closely with actual deer occurrences, especially in the southern and coastal regions. So while it’s subtle, the fit is actually very reasonable given the scale.
+
+
 
 #### Model Validation
 ```{r}
@@ -386,5 +395,12 @@ The Generalized Additive Model (GAM) incorporating smooth terms for forest cover
 
 The model also achieved a notably low Generalized Cross-Validation (GCV) score of approximately 1.56e-15, suggesting a high-quality smooth fit. In terms of parsimony and model performance, the GAM yielded an AIC of -71,014,078, which is substantially lower than that of the best-performing parametric model (AIC ≈ 346,672). This dramatic improvement in AIC indicates a far superior balance between model fit and complexity.
 
-Compared to earlier polynomial Poisson point process models, the GAM shows clear advantages in flexibility, interpretability, and predictive strength, making it the most effective model among those evaluated for capturing spatial variation in deer intensity across British Columbia.
+### Conclusion
+In conclusion, we have successfully built a robust model to use forest cover, elevation, and human population to explain deer intensity. Starting from univariate Poisson point process models to obtain insights from different variables, we built up to a multivariate polynomial model and finally a Generalized Additive Model (GAM).
+
+Through the bottom model building approach, we first gained insights of each individual covariates. Then, through Moran’s I and empirical variogram, we figured out there is residual spatial dependence. That’s why we decided to adopt a GAM for more flexibility.
+
+Finally, we obtained our best model, GAM, which explained 75.2% of deviance. Which is a huge improvement from the previous models. Through the successful building of the model, we also answered the research questions defined in the beginning of our project：How do forest cover, elevation, and human population affect deer presence? 
+
+In terms of model comparison, Although GAM captured complex nonlinear relationships and explained a substantial portion of the deviance, also achieved a much lower AIC, Poisson models built in the middle of the process remain valuable for their interpretability and theoretical grounding in spatial point process theory.
 
